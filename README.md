@@ -1,40 +1,56 @@
 # Intro
 This is an NGINX module to check for a valid JWT and proxy to an upstream server or redirect to a login page.
 
-# Build Requirements
+## Building and testing
+To build the Docker image, start NGINX, and run our Bash test against it, run
+```bash
+make
+```
+
+When you make a change to the module, run `make rebuild-nginx`.
+
+When you make a change to `test.sh`, run `make rebuild-test-runner`.
+
+| Command                    | Description                                 |
+| -------------------------- |:-------------------------------------------:|
+| `make build-nginx`         | Builds the NGINX image                      |
+| `make rebuild-nginx`       | Re-builds the NGINX image                   |
+| `make build-test-runner`   | Builds the image that will run `test.sh`    |
+| `make rebuild-test-runner` | Re-builds the image that will run `test.sh` |
+| `make start-nginx`         | Starts the NGINX container                  |
+| `make stop-nginx`          | Stops the NGINX container                   |
+| `make test`                | Runs `test.sh` against the NGINX container  |
+
+You can re-run tests as many times as you like while NGINX is up.
+When you're done running tests, make sure to stop the NGINX container.
+
+The Dockerfile builds all of the dependencies as well as the module,
+downloads a binary version of NGINX, and runs the module as a dynamic module.
+
+Tests get executed in containers. This project is 100% Docker-ized.
+
+## Dependencies
 This module depends on the [JWT C Library](https://github.com/benmcollins/libjwt)
 
-Transitively, that library depends on a JSON Parser called [Jansson](https://github.com/akheron/jansson) as well as the OpenSSL library.
+Transitively, that library depends on a JSON Parser called
+[Jansson](https://github.com/akheron/jansson) as well as the OpenSSL library.
 
-# NGINX Directives
-This module requires several new nginx.conf directives, which can be specified in on the `main` `server` or `location` level.
+## NGINX Directives
+This module requires several new `nginx.conf` directives,
+which can be specified in on the `main` `server` or `location` level.
 
 ```
-auth_jwt_key "00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF";
+auth_jwt_key "00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF"; # see docs for format based on algorithm
 auth_jwt_loginurl "https://yourdomain.com/loginpage";
 auth_jwt_enabled on;
 auth_jwt_algorithm HS256; # or RS256
 auth_jwt_validate_email on;  # or off
 ```
 
-So, a typical use would be to specify the key and loginurl on the main level and then only turn on the locations that you want to secure (not the login page).  Unauthorized requests are given 302 "Moved Temporarily" responses with a location of the specified loginurl.
+The default algorithm is 'HS256', for symmetric key validation.  When using HS256, the value for `auth_jwt_key` should be specified in binhex format.  It is recommended to use at least 256 bits of data (32 pairs of hex characters or 64 characters in total) as in the example above.  Note that using more than 512 bits will not increase the security.  For key guidelines please see NIST Special Publication 800-107 Recommendation for Applications Using Approved Hash Algorithms, Section 5.3.2 The HMAC Key.
 
-```
-auth_jwt_redirect            off;
-```
-If you prefer to return 401 Unauthorized, you may turn `auth_jwt_redirect` off.
-
-```
-auth_jwt_validation_type AUTHORIZATION;
-auth_jwt_validation_type COOKIE=rampartjwt;
-```
-By default the authorization header is used to provide a JWT for validation.  However, you may use the `auth_jwt_validation_type` configuration to specify the name of a cookie that provides the JWT.
-
-
-
-The default algorithm is 'HS256', for symmetric key validation.  Also supported is 'RS256', for RSA 256-bit public key validation.
-
-If using "auth_jwt_algorithm RS256;", then the 'auth_jwt_key' field must be set to your public key.  That is the public key, rather than a PEM certificate.  I.e.:
+The configuration also supports the `auth_jwt_algorithm` 'RS256', for RSA 256-bit public key validation. If using "auth_jwt_algorithm RS256;", then the `auth_jwt_key` field must be set to your public key.
+That is the public key, rather than a PEM certificate.  I.e.:
 
 ```
 auth_jwt_key "-----BEGIN PUBLIC KEY-----
@@ -48,16 +64,25 @@ oQIDAQAB
 -----END PUBLIC KEY-----";
 ```
 
+A typical use would be to specify the key and loginurl on the main level
+and then only turn on the locations that you want to secure (not the login page).
+Unauthorized requests are given 302 "Moved Temporarily" responses with a location of the specified loginurl.
 
+```
+auth_jwt_redirect            off;
+```
+If you prefer to return 401 Unauthorized, you may turn `auth_jwt_redirect` off.
 
-By default, the module will attempt to validate the email address field of the JWT, then set the x-email header of the session, and will log an error if it isn't found.  To disable this behavior, for instance if you are using a different user identifier property such as 'sub', set:
+```
+auth_jwt_validation_type AUTHORIZATION;
+auth_jwt_validation_type COOKIE=rampartjwt;
+```
+By default the authorization header is used to provide a JWT for validation.
+However, you may use the `auth_jwt_validation_type` configuration to specify the name of a cookie that provides the JWT.
 
 ```
 auth_jwt_validate_email off;
 ```
-
-
-
-The Dockerfile builds all of the dependencies as well as the module, downloads a binary version of nginx, and runs the module as a dynamic module.
-
-Have a look at build.sh, which creates the docker image and container and executes some test requests to illustrate that some pages are secured by the module and requre a valid JWT.
+By default, the module will attempt to validate the email address field of the JWT, then set the x-email header of the
+session, and will log an error if it isn't found.  To disable this behavior, for instance if you are using a different
+user identifier property such as 'sub', set `auth_jwt_validate_email` to the value `off`.
